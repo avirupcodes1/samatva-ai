@@ -10,22 +10,42 @@
  */
 import { promises as fs } from "fs";
 import path from "path";
+import { Redis } from "@upstash/redis";
 import type { User, MoodEntry, JournalEntry, ChatMessage } from "./types";
 
+/*
+ * Backend selection:
+ *   - If a KV/Redis REST endpoint is configured (Upstash or Vercel KV), use it.
+ *     Serverless hosts like Vercel have a read-only/ephemeral filesystem, so a
+ *     KV store is required there for data to persist.
+ *   - Otherwise fall back to local JSON files under /data (zero-setup dev).
+ * The typed `db` accessors below are identical either way.
+ */
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+const redis =
+  REDIS_URL && REDIS_TOKEN ? new Redis({ url: REDIS_URL, token: REDIS_TOKEN }) : null;
+
 const DATA_DIR = path.join(process.cwd(), "data");
+const keyFor = (collection: string) => `samatva:${collection}`;
 
 async function ensureDir(): Promise<void> {
   await fs.mkdir(DATA_DIR, { recursive: true });
 }
 
-function fileFor(collection: string): string {
-  return path.join(DATA_DIR, `${collection}.json`);
-}
-
 async function readCollection<T>(collection: string): Promise<T[]> {
+  if (redis) {
+    try {
+      const data = await redis.get<T[]>(keyFor(collection));
+      return Array.isArray(data) ? data : [];
+    } catch (err) {
+      console.error(`[storage] KV read failed for ${collection}:`, (err as Error).message);
+      return [];
+    }
+  }
   await ensureDir();
   try {
-    const raw = await fs.readFile(fileFor(collection), "utf8");
+    const raw = await fs.readFile(path.join(DATA_DIR, `${collection}.json`), "utf8");
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as T[]) : [];
   } catch (err: unknown) {
@@ -37,10 +57,15 @@ async function readCollection<T>(collection: string): Promise<T[]> {
 }
 
 async function persist<T>(collection: string, items: T[]): Promise<void> {
+  if (redis) {
+    await redis.set(keyFor(collection), items);
+    return;
+  }
   await ensureDir();
-  const tmp = fileFor(collection) + ".tmp";
+  const tmp = path.join(DATA_DIR, `${collection}.json.tmp`);
+  const final = path.join(DATA_DIR, `${collection}.json`);
   await fs.writeFile(tmp, JSON.stringify(items, null, 2), "utf8");
-  await fs.rename(tmp, fileFor(collection)); // atomic replace
+  await fs.rename(tmp, final); // atomic replace
 }
 
 /**

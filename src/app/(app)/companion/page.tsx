@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, MessageCircleHeart } from "lucide-react";
-import { HelplineList } from "@/components/Helplines";
+import { Send, MessageCircleHeart, LifeBuoy } from "lucide-react";
+import { CompactHelplines } from "@/components/Helplines";
 import { screenForCrisis } from "@/lib/safety";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/types";
@@ -20,6 +20,7 @@ export default function CompanionPage() {
   const [sending, setSending] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [showCrisis, setShowCrisis] = useState(false);
+  const [crisisOpen, setCrisisOpen] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -128,7 +129,26 @@ export default function CompanionPage() {
 
       {showCrisis && (
         <div className="mt-3">
-          <HelplineList compact />
+          {crisisOpen ? (
+            <div>
+              <div className="mb-1 flex justify-end">
+                <button
+                  onClick={() => setCrisisOpen(false)}
+                  className="text-xs font-medium text-ink-faint hover:text-ink"
+                >
+                  Hide helplines
+                </button>
+              </div>
+              <CompactHelplines />
+            </div>
+          ) : (
+            <button
+              onClick={() => setCrisisOpen(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border border-danger/30 bg-danger-soft/60 py-2 text-sm font-semibold text-danger-strong"
+            >
+              <LifeBuoy size={16} /> Helplines available — tap to view
+            </button>
+          )}
         </div>
       )}
 

@@ -32,6 +32,39 @@ export function HelplineList({ compact = false }: { compact?: boolean }) {
 }
 
 /**
+ * A condensed, height-bounded helpline list for tight layouts (e.g. the chat
+ * screen) so it never pushes the conversation off-screen. Single-line rows,
+ * internal scroll.
+ */
+export function CompactHelplines() {
+  return (
+    <div className="rounded-[var(--radius-md)] border border-danger/30 bg-danger-soft/60 p-3">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-danger-strong">
+        <ShieldAlert size={16} /> You matter — please reach out
+      </div>
+      <div className="max-h-[32vh] space-y-1.5 overflow-y-auto pr-1">
+        {HELPLINES.map((h) => (
+          <a
+            key={h.name}
+            href={`tel:${h.phone.replace(/[^\d+]/g, "")}`}
+            className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] bg-surface px-3 py-2 transition hover:bg-surface-soft"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <Phone size={14} className="shrink-0 text-primary-strong" />
+              <span className="truncate text-sm font-semibold text-ink">{h.name}</span>
+              <span className="hidden shrink-0 text-xs text-ink-faint sm:inline">{h.hours}</span>
+            </span>
+            <span className="shrink-0 font-mono text-sm font-semibold text-primary-strong">
+              {h.phone}
+            </span>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * The alert shown in-line whenever the safety layer flags a message.
  * Deliberately prominent, warm and non-clinical.
  */

@@ -12,13 +12,54 @@
  */
 import { HELPLINES } from "./safety";
 
+/*
+ * Provider selection:
+ *   AI_PROVIDER=ollama  (default) → local Ollama at OLLAMA_URL, no key
+ *   AI_PROVIDER=google | hosted   → any OpenAI-compatible Gemma endpoint
+ *                                   (Google AI Studio, Groq, OpenRouter…)
+ * Both speak {model, messages:[{role,content}]}; only the URL, auth header
+ * and response shape differ.
+ */
+const AI_PROVIDER = (process.env.AI_PROVIDER || "ollama").toLowerCase();
+const isHosted = AI_PROVIDER !== "ollama";
+
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
-const GEMMA_MODEL = process.env.GEMMA_MODEL || "gemma4";
+const AI_API_KEY = process.env.AI_API_KEY || "";
+const AI_BASE_URL = (
+  process.env.AI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai"
+).replace(/\/$/, "");
+const GEMMA_MODEL =
+  process.env.GEMMA_MODEL || (isHosted ? "gemma-3-27b-it" : "gemma4");
 const REQUEST_TIMEOUT_MS = 45_000;
 
 interface ChatTurn {
   role: "system" | "user" | "assistant";
   content: string;
+}
+
+/** Dispatch to the configured provider. Never throws; returns null on failure. */
+async function chat(messages: ChatTurn[]): Promise<string | null> {
+  return isHosted ? openAiChat(messages) : ollamaChat(messages);
+}
+
+/*
+ * "Thinking" Gemma models (e.g. gemma-4) can wrap their private reasoning in
+ * <thought>/<think>/<reasoning> tags. That must never reach the student — we
+ * strip complete blocks, plus a trailing unclosed one left by a truncated
+ * response. Returns null if nothing but reasoning remains.
+ */
+function stripReasoning(raw: string): string {
+  return raw
+    .replace(/<(thought|think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<(thought|think|thinking|reasoning)>[\s\S]*$/i, "") // unclosed/truncated
+    .replace(/<\/?(thought|think|thinking|reasoning)>/gi, "") // stray tags
+    .trim();
+}
+
+function cleanReply(raw?: string | null): string | null {
+  if (!raw) return null;
+  const cleaned = stripReasoning(raw);
+  return cleaned.length > 0 ? cleaned : null;
 }
 
 /**
@@ -36,7 +77,7 @@ async function ollamaChat(messages: ChatTurn[]): Promise<string | null> {
         model: GEMMA_MODEL,
         messages,
         stream: false,
-        options: { temperature: 0.7, num_predict: 500 },
+        options: { temperature: 0.7, num_predict: 800 },
       }),
       signal: controller.signal,
     });
@@ -45,8 +86,7 @@ async function ollamaChat(messages: ChatTurn[]): Promise<string | null> {
       return null;
     }
     const data = (await res.json()) as { message?: { content?: string } };
-    const text = data?.message?.content?.trim();
-    return text && text.length > 0 ? text : null;
+    return cleanReply(data?.message?.content);
   } catch (err) {
     console.error("[gemma] Ollama unreachable:", (err as Error).message);
     return null;
@@ -55,8 +95,52 @@ async function ollamaChat(messages: ChatTurn[]): Promise<string | null> {
   }
 }
 
+/**
+ * Call to an OpenAI-compatible chat endpoint (Google AI Studio, Groq,
+ * OpenRouter…). Returns the assistant text, or null on any failure.
+ */
+async function openAiChat(messages: ChatTurn[]): Promise<string | null> {
+  if (!AI_API_KEY) {
+    console.error("[gemma] AI_API_KEY is not set for the hosted provider.");
+    return null;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${AI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: GEMMA_MODEL,
+        messages,
+        temperature: 0.7,
+        max_tokens: 800,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.error(`[gemma] hosted API responded ${res.status}`);
+      return null;
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    return cleanReply(data?.choices?.[0]?.message?.content);
+  } catch (err) {
+    console.error("[gemma] hosted API unreachable:", (err as Error).message);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Health probe used by the UI to show an "AI online/offline" indicator. */
 export async function isGemmaOnline(): Promise<boolean> {
+  // Hosted providers: treat "key present" as online (a real ping would cost a call).
+  if (isHosted) return AI_API_KEY.length > 0;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 2500);
   try {
@@ -79,6 +163,8 @@ Your role:
 - Be encouraging, gentle and human. Keep replies fairly short (2-5 sentences) and easy to read.
 - Where helpful, offer one small, practical, evidence-based coping idea (a breathing exercise, a short break, reframing an anxious thought, a study-life balance tip).
 - Speak simply. You may occasionally use light Hinglish warmth if the student does.
+- Reply with your final message ONLY. Never show your reasoning or any <thought>, <think> or <reasoning> tags.
+- If the student brings up something off-topic (sports, movies, etc.), respond warmly and briefly, then gently bring it back to how they're feeling or their prep.
 
 Hard boundaries (never break these):
 - You are NOT a doctor or therapist. Never diagnose, never suggest medication.
@@ -117,7 +203,7 @@ export async function companionReply(
     ...history.slice(-10),
     { role: "user", content: userMessage },
   ];
-  const reply = await ollamaChat(messages);
+  const reply = await chat(messages);
   return reply ?? fallbackCompanionReply();
 }
 
@@ -132,7 +218,7 @@ export async function journalReflection(entry: string, ctx?: UserContext): Promi
         `reflect back what you notice, validate it, and offer one gentle suggestion if it fits.\n\n"${entry}"`,
     },
   ];
-  const reply = await ollamaChat(messages);
+  const reply = await chat(messages);
   return reply ?? fallbackJournalReflection();
 }
 
@@ -154,7 +240,7 @@ export async function weeklySummary(
         `Overall mood trend: ${stats.trend}`,
     },
   ];
-  const reply = await ollamaChat(messages);
+  const reply = await chat(messages);
   return reply ?? fallbackWeeklySummary(stats);
 }
 

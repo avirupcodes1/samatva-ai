@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import { EXAM_TYPES } from "@/lib/types";
 
 export default function SignupPage() {
@@ -122,7 +122,7 @@ export default function SignupPage() {
         )}
 
         <button type="submit" className="btn btn-primary w-full" disabled={loading}>
-          <Sparkles size={18} />
+          <UserPlus size={18} />
           {loading ? "Creating…" : "Create account"}
         </button>
       </form>

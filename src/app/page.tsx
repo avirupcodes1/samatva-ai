@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   SmilePlus,
   NotebookPen,
@@ -10,6 +11,7 @@ import {
   HeartHandshake,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { getCurrentUser } from "@/lib/auth";
 
 const FEATURES = [
   { icon: SmilePlus, title: "Daily check-ins", body: "A 10-second pulse on your mood, energy, stress and sleep." },
@@ -20,7 +22,11 @@ const FEATURES = [
   { icon: ShieldCheck, title: "Safety first", body: "A built-in safety net that surfaces real help when you need it." },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  // Signed-in users should land in the app, not the marketing page.
+  const user = await getCurrentUser();
+  if (user) redirect("/dashboard");
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">

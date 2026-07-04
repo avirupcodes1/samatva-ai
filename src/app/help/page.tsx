@@ -1,7 +1,7 @@
-import Link from "next/link";
 import type { Metadata } from "next";
-import { ArrowLeft, HeartHandshake, Phone } from "lucide-react";
+import { HeartHandshake, Phone } from "lucide-react";
 import { HelplineList } from "@/components/Helplines";
+import { BackButton } from "@/components/BackButton";
 
 export const metadata: Metadata = {
   title: "Get help now · Samatva",
@@ -10,9 +10,7 @@ export const metadata: Metadata = {
 export default function HelpPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-10">
-      <Link href="/" className="mb-6 inline-flex items-center gap-2 text-sm text-ink-soft hover:text-ink">
-        <ArrowLeft size={16} /> Back
-      </Link>
+      <BackButton />
 
       <div className="card p-8">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-soft text-primary-strong">

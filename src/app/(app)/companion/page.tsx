@@ -136,43 +136,54 @@ export default function CompanionPage() {
 
       {/* Conversation controls */}
       <div className="mb-3 flex items-center gap-2">
-        <button onClick={newChat} className="chip gap-1 bg-primary text-on-primary hover:opacity-90">
+        <button
+          onClick={() => {
+            newChat();
+            setHistoryOpen(false);
+          }}
+          className="chip gap-1 bg-primary text-on-primary hover:opacity-90"
+        >
           <Plus size={14} /> New chat
         </button>
-        <button
-          onClick={() => setHistoryOpen((o) => !o)}
-          className={cn("chip gap-1", historyOpen ? "bg-accent-soft text-accent" : "hover:text-ink")}
-        >
-          <History size={14} /> Past history
-          {sessions.length > 0 && <span className="text-ink-faint">({sessions.length})</span>}
-        </button>
-      </div>
 
-      {/* Past conversations panel */}
-      {historyOpen && (
-        <div className="card mb-3 max-h-64 overflow-y-auto p-2">
-          {sessions.length === 0 ? (
-            <p className="px-2 py-3 text-center text-sm text-ink-faint">No past conversations yet.</p>
-          ) : (
-            sessions.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => {
-                  selectSession(s.id);
-                  setHistoryOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between gap-3 rounded-[var(--radius-sm)] px-3 py-2 text-left transition",
-                  s.id === activeId ? "bg-primary-soft" : "hover:bg-surface-soft",
+        {/* Past history — floats as a dropdown so it never pushes the chat */}
+        <div className="relative">
+          <button
+            onClick={() => setHistoryOpen((o) => !o)}
+            className={cn("chip gap-1", historyOpen ? "bg-accent-soft text-accent" : "hover:text-ink")}
+          >
+            <History size={14} /> Past history
+            {sessions.length > 0 && <span className="text-ink-faint">({sessions.length})</span>}
+          </button>
+          {historyOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setHistoryOpen(false)} />
+              <div className="card absolute left-0 top-full z-20 mt-2 max-h-72 w-72 max-w-[80vw] overflow-y-auto p-2 shadow-[var(--shadow-lift)]">
+                {sessions.length === 0 ? (
+                  <p className="px-2 py-3 text-center text-sm text-ink-faint">No past conversations yet.</p>
+                ) : (
+                  sessions.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        selectSession(s.id);
+                        setHistoryOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-3 rounded-[var(--radius-sm)] px-3 py-2 text-left transition",
+                        s.id === activeId ? "bg-primary-soft" : "hover:bg-surface-soft",
+                      )}
+                    >
+                      <span className="truncate text-sm text-ink">{s.title}</span>
+                      <span className="shrink-0 text-xs text-ink-faint">{relativeTime(s.updatedAt)}</span>
+                    </button>
+                  ))
                 )}
-              >
-                <span className="truncate text-sm text-ink">{s.title}</span>
-                <span className="shrink-0 text-xs text-ink-faint">{relativeTime(s.updatedAt)}</span>
-              </button>
-            ))
+              </div>
+            </>
           )}
         </div>
-      )}
+      </div>
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto rounded-[var(--radius-md)] border border-border bg-surface p-4">

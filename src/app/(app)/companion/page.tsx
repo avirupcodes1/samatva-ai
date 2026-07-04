@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, MessageCircleHeart, LifeBuoy, Plus } from "lucide-react";
+import { Send, MessageCircleHeart, LifeBuoy, Plus, History } from "lucide-react";
 import { CompactHelplines } from "@/components/Helplines";
 import { screenForCrisis } from "@/lib/safety";
-import { cn } from "@/lib/utils";
+import { cn, relativeTime } from "@/lib/utils";
 import type { ChatMessage, ChatSession } from "@/lib/types";
 
 const STARTERS = [
@@ -23,6 +23,7 @@ export default function CompanionPage() {
   const [loaded, setLoaded] = useState(false);
   const [showCrisis, setShowCrisis] = useState(false);
   const [crisisOpen, setCrisisOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const refreshSessions = useCallback(async () => {
@@ -55,6 +56,22 @@ export default function CompanionPage() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, sending]);
+
+  // The AI reply is generated server-side and persisted, so it keeps going even
+  // if you switch tabs. When you come back, re-sync so the reply shows up.
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      refreshSessions();
+      if (activeId) loadMessages(activeId);
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [activeId, refreshSessions, loadMessages]);
 
   function newChat() {
     // Fresh, unsent conversation — the server creates it on the first message.
@@ -95,7 +112,8 @@ export default function CompanionPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setMessages((m) => [...m, data.reply]);
+        // Dedup by id so a tab-return re-sync + this append can't double it.
+        setMessages((m) => (m.some((x) => x.id === data.reply.id) ? m : [...m, data.reply]));
         if (data.crisis) setShowCrisis(true);
         if (data.sessionId && data.sessionId !== activeId) setActiveId(data.sessionId);
         refreshSessions(); // pick up the new/updated title + ordering
@@ -116,31 +134,45 @@ export default function CompanionPage() {
         <p className="text-ink-soft">A calm, private space to talk. Not a therapist — but always here.</p>
       </div>
 
-      {/* Conversations */}
-      <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1">
-        <button
-          onClick={newChat}
-          className={cn(
-            "chip shrink-0 gap-1",
-            activeId === null ? "bg-primary text-on-primary" : "hover:bg-primary-soft hover:text-primary-strong",
-          )}
-        >
+      {/* Conversation controls */}
+      <div className="mb-3 flex items-center gap-2">
+        <button onClick={newChat} className="chip gap-1 bg-primary text-on-primary hover:opacity-90">
           <Plus size={14} /> New chat
         </button>
-        {sessions.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => selectSession(s.id)}
-            title={s.title}
-            className={cn(
-              "chip max-w-[170px] shrink-0 truncate",
-              s.id === activeId ? "bg-primary-soft text-primary-strong" : "hover:text-ink",
-            )}
-          >
-            {s.title}
-          </button>
-        ))}
+        <button
+          onClick={() => setHistoryOpen((o) => !o)}
+          className={cn("chip gap-1", historyOpen ? "bg-accent-soft text-accent" : "hover:text-ink")}
+        >
+          <History size={14} /> Past history
+          {sessions.length > 0 && <span className="text-ink-faint">({sessions.length})</span>}
+        </button>
       </div>
+
+      {/* Past conversations panel */}
+      {historyOpen && (
+        <div className="card mb-3 max-h-64 overflow-y-auto p-2">
+          {sessions.length === 0 ? (
+            <p className="px-2 py-3 text-center text-sm text-ink-faint">No past conversations yet.</p>
+          ) : (
+            sessions.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => {
+                  selectSession(s.id);
+                  setHistoryOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between gap-3 rounded-[var(--radius-sm)] px-3 py-2 text-left transition",
+                  s.id === activeId ? "bg-primary-soft" : "hover:bg-surface-soft",
+                )}
+              >
+                <span className="truncate text-sm text-ink">{s.title}</span>
+                <span className="shrink-0 text-xs text-ink-faint">{relativeTime(s.updatedAt)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto rounded-[var(--radius-md)] border border-border bg-surface p-4">

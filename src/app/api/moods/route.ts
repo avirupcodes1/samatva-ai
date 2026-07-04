@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/storage";
-import { uid } from "@/lib/utils";
-import type { MoodEntry } from "@/lib/types";
 
 function clamp1to5(v: unknown): number | null {
   const n = Number(v);
@@ -40,16 +38,13 @@ export async function POST(req: Request) {
     if (Number.isFinite(s)) sleepHours = Math.min(24, Math.max(0, s));
   }
 
-  const entry: MoodEntry = {
-    id: uid("m_"),
-    userId: user.id,
+  // One check-in per day: creates today's entry, or updates it if it exists.
+  const { entry, updated } = await db.upsertTodayMood(user.id, {
     mood,
     energy,
     stress,
     sleepHours,
     note: String(body.note ?? "").slice(0, 500),
-    createdAt: new Date().toISOString(),
-  };
-  await db.addMood(entry);
-  return NextResponse.json({ entry }, { status: 201 });
+  });
+  return NextResponse.json({ entry, updated }, { status: updated ? 200 : 201 });
 }

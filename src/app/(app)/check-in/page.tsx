@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2 } from "lucide-react";
 import { cn, MOOD_EMOJI, MOOD_LABELS } from "@/lib/utils";
+import type { MoodEntry } from "@/lib/types";
 
 const ENERGY_LABELS = ["Drained", "Low", "Okay", "Good", "Buzzing"];
 const STRESS_LABELS = ["Calm", "Mild", "Moderate", "High", "Overwhelmed"];
@@ -18,6 +19,29 @@ export default function CheckInPage() {
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUpdate, setIsUpdate] = useState(false);
+  const [wasUpdate, setWasUpdate] = useState(false);
+
+  // If they already checked in today, prefill so this becomes an update.
+  useEffect(() => {
+    fetch("/api/moods")
+      .then((r) => r.json())
+      .then((d) => {
+        const today = new Date().toISOString().slice(0, 10);
+        const t = ((d.moods ?? []) as MoodEntry[]).find(
+          (m) => m.createdAt.slice(0, 10) === today,
+        );
+        if (t) {
+          setMood(t.mood);
+          setEnergy(t.energy);
+          setStress(t.stress);
+          setSleepHours(t.sleepHours != null ? String(t.sleepHours) : "");
+          setNote(t.note ?? "");
+          setIsUpdate(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   async function submit() {
     setSaving(true);
@@ -28,11 +52,12 @@ export default function CheckInPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mood, energy, stress, sleepHours, note }),
       });
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
         setError(data.error ?? "Could not save. Try again.");
         return;
       }
+      setWasUpdate(Boolean(data.updated));
       setDone(true);
       setTimeout(() => {
         router.push("/dashboard");
@@ -51,7 +76,7 @@ export default function CheckInPage() {
         <span className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft text-primary-strong">
           <Check size={30} />
         </span>
-        <h1 className="mt-4 text-xl font-bold text-ink">Checked in 💚</h1>
+        <h1 className="mt-4 text-xl font-bold text-ink">{wasUpdate ? "Updated 💚" : "Checked in 💚"}</h1>
         <p className="mt-1 text-ink-soft">Thank you for taking a moment for yourself.</p>
       </div>
     );
@@ -61,7 +86,11 @@ export default function CheckInPage() {
     <div className="mx-auto max-w-xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-ink">Daily check-in</h1>
-        <p className="text-ink-soft">A quick, honest pulse on how you&apos;re doing right now.</p>
+        <p className="text-ink-soft">
+          {isUpdate
+            ? "You've already checked in today — tweak it below to update."
+            : "A quick, honest pulse on how you're doing right now."}
+        </p>
       </div>
 
       {/* Mood */}
@@ -143,7 +172,7 @@ export default function CheckInPage() {
 
       <button onClick={submit} className="btn btn-primary w-full" disabled={saving}>
         {saving ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
-        {saving ? "Saving…" : "Save check-in"}
+        {saving ? "Saving…" : isUpdate ? "Update today's check-in" : "Save check-in"}
       </button>
     </div>
   );

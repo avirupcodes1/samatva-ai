@@ -11,6 +11,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { Redis } from "@upstash/redis";
+import { uid } from "./utils";
 import type { User, MoodEntry, JournalEntry, ChatMessage, VisionEntry } from "./types";
 
 /*
@@ -133,6 +134,34 @@ export const db = {
       items: [...all, entry],
       result: undefined,
     }));
+  },
+  /**
+   * One check-in per calendar day: if the user already has an entry today,
+   * update it; otherwise create a new one. Race-safe via the per-file queue.
+   */
+  async upsertTodayMood(
+    userId: string,
+    values: Pick<MoodEntry, "mood" | "energy" | "stress" | "sleepHours" | "note">,
+  ): Promise<{ entry: MoodEntry; updated: boolean }> {
+    return mutate<MoodEntry, { entry: MoodEntry; updated: boolean }>("moods", (all) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const idx = all.findIndex(
+        (m) => m.userId === userId && m.createdAt.slice(0, 10) === today,
+      );
+      if (idx >= 0) {
+        const entry: MoodEntry = { ...all[idx], ...values }; // keep id + createdAt
+        const items = [...all];
+        items[idx] = entry;
+        return { items, result: { entry, updated: true } };
+      }
+      const entry: MoodEntry = {
+        id: uid("m_"),
+        userId,
+        ...values,
+        createdAt: new Date().toISOString(),
+      };
+      return { items: [...all, entry], result: { entry, updated: false } };
+    });
   },
 
   // Journal

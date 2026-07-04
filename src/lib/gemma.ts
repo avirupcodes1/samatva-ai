@@ -1,15 +1,4 @@
-/*
- * Gemma client — talks to a locally running Ollama server.
- *
- * The whole "AI" of Samatva is here: we send well-crafted prompts and read
- * back text. There is NO training / fine-tuning. If Ollama is unreachable
- * (common during a demo), every helper degrades gracefully to a warm,
- * hand-written fallback so the app keeps working.
- *
- * Env:
- *   OLLAMA_URL    default http://localhost:11434
- *   GEMMA_MODEL   default gemma4
- */
+
 import { HELPLINES } from "./safety";
 import { retrieve, groundingBlock } from "./knowledge";
 import type { VisionKind } from "./types";

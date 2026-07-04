@@ -11,7 +11,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { Redis } from "@upstash/redis";
-import type { User, MoodEntry, JournalEntry, ChatMessage } from "./types";
+import type { User, MoodEntry, JournalEntry, ChatMessage, VisionEntry } from "./types";
 
 /*
  * Backend selection:
@@ -163,6 +163,20 @@ export const db = {
     }));
   },
 
+  // Vision (only the text reflection is stored — never the image)
+  async getVisions(userId: string): Promise<VisionEntry[]> {
+    const all = await readCollection<VisionEntry>("visions");
+    return all
+      .filter((v) => v.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+  async addVision(entry: VisionEntry): Promise<void> {
+    await mutate<VisionEntry, void>("visions", (all) => ({
+      items: [...all, entry],
+      result: undefined,
+    }));
+  },
+
   // Account deletion (data export/erase) — serialized per collection.
   async deleteUserData(userId: string): Promise<void> {
     await Promise.all([
@@ -170,6 +184,7 @@ export const db = {
       mutate<MoodEntry, void>("moods", (m) => ({ items: m.filter((x) => x.userId !== userId), result: undefined })),
       mutate<JournalEntry, void>("journals", (j) => ({ items: j.filter((x) => x.userId !== userId), result: undefined })),
       mutate<ChatMessage, void>("chats", (c) => ({ items: c.filter((x) => x.userId !== userId), result: undefined })),
+      mutate<VisionEntry, void>("visions", (v) => ({ items: v.filter((x) => x.userId !== userId), result: undefined })),
     ]);
   },
 };

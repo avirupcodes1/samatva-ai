@@ -65,6 +65,25 @@ export interface ChatMessage {
   createdAt: string;
 }
 
+/* ---- Vision (multimodal) --------------------------------------------- */
+
+export type VisionKind = "timetable" | "mock-result" | "study-space";
+
+export const VISION_KINDS: { id: VisionKind; label: string; emoji: string; hint: string }[] = [
+  { id: "timetable", label: "Study timetable", emoji: "📅", hint: "Spot overload & missing breaks" },
+  { id: "mock-result", label: "Mock result", emoji: "📊", hint: "Reframe a tough score, kindly" },
+  { id: "study-space", label: "Study space", emoji: "🪴", hint: "Make it calmer & more focused" },
+];
+
+/** Only the AI's text reflection is stored — never the image. */
+export interface VisionEntry {
+  id: string;
+  userId: string;
+  kind: VisionKind;
+  reflection: string;
+  createdAt: string;
+}
+
 export function toPublicUser(user: User): PublicUser {
   const { passwordHash: _passwordHash, ...pub } = user;
   return pub;

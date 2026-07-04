@@ -11,6 +11,7 @@
  *   GEMMA_MODEL   default gemma4
  */
 import { HELPLINES } from "./safety";
+import type { VisionKind } from "./types";
 
 
 const AI_PROVIDER = (process.env.AI_PROVIDER || "ollama").toLowerCase();
@@ -32,9 +33,14 @@ const FALLBACK_MODELS = (process.env.GEMMA_FALLBACK_MODELS || "gemma-4-31b-it")
   .filter(Boolean);
 const REQUEST_TIMEOUT_MS = 55_000; // just under the route maxDuration (60s)
 
+/** A content part for multimodal (vision) messages. */
+type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 interface ChatTurn {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | ContentPart[];
 }
 
 /** Dispatch to the configured provider. Never throws; returns null on failure. */
@@ -265,6 +271,41 @@ export async function weeklySummary(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Vision (multimodal) — Gemma 4 reads an uploaded photo              */
+/* ------------------------------------------------------------------ */
+const VISION_PROMPTS: Record<VisionKind, string> = {
+  timetable:
+    "This is a photo of my study timetable/schedule. As my warm well-being companion (NOT an academic tutor), look at it and gently point out where I might be overloading, skipping breaks, or sacrificing sleep. Then suggest 1-2 small, kind balance tweaks. Keep it to 3-4 sentences.",
+  "mock-result":
+    "This is a photo of my mock-test result. First acknowledge how this might feel, then remind me warmly that one score doesn't define my worth or my final result, and offer ONE small constructive next step. Do not lecture me about the marks. Keep it to 3-4 gentle sentences.",
+  "study-space":
+    "This is a photo of my study space. Comment gently and supportively on it, and offer one tiny, doable tip to make it calmer or more focused. Keep it warm and to 2-3 sentences.",
+};
+
+/**
+ * Gemma 4 vision: reflect on an uploaded image (as a base64 data URL).
+ * The image is only ever passed to the model — callers must not store it.
+ */
+export async function visionReflect(
+  imageDataUrl: string,
+  kind: VisionKind,
+  ctx?: UserContext,
+): Promise<string> {
+  const messages: ChatTurn[] = [
+    { role: "system", content: PERSONA + contextLine(ctx) },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: VISION_PROMPTS[kind] },
+        { type: "image_url", image_url: { url: imageDataUrl } },
+      ],
+    },
+  ];
+  const reply = await chat(messages);
+  return reply ?? fallbackVisionReflection();
+}
+
+/* ------------------------------------------------------------------ */
 /*  Graceful fallbacks (used when Ollama is offline)                   */
 /* ------------------------------------------------------------------ */
 export function isFallback(text: string): boolean {
@@ -293,6 +334,14 @@ function fallbackWeeklySummary(stats: { checkIns: number; trend: string }): stri
     FALLBACK_MARK +
     `You checked in ${stats.checkIns} time(s) this week — that steady self-awareness is genuinely worth celebrating. ` +
     `Your mood trend looks ${stats.trend}. For next week, try one small anchor: a fixed wind-down time before sleep.`
+  );
+}
+
+function fallbackVisionReflection(): string {
+  return (
+    FALLBACK_MARK +
+    "Thanks for sharing this with me — taking a moment to look at it honestly is already a caring step. " +
+    "I couldn't reach my thinking engine to look closely just now, but whatever it shows, be kind to yourself and remember one snapshot isn't the whole story."
   );
 }
 

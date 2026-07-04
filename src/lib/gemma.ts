@@ -12,14 +12,7 @@
  */
 import { HELPLINES } from "./safety";
 
-/*
- * Provider selection:
- *   AI_PROVIDER=ollama  (default) → local Ollama at OLLAMA_URL, no key
- *   AI_PROVIDER=google | hosted   → any OpenAI-compatible Gemma endpoint
- *                                   (Google AI Studio, Groq, OpenRouter…)
- * Both speak {model, messages:[{role,content}]}; only the URL, auth header
- * and response shape differ.
- */
+
 const AI_PROVIDER = (process.env.AI_PROVIDER || "ollama").toLowerCase();
 const isHosted = AI_PROVIDER !== "ollama";
 
@@ -30,6 +23,13 @@ const AI_BASE_URL = (
 ).replace(/\/$/, "");
 const GEMMA_MODEL =
   process.env.GEMMA_MODEL || (isHosted ? "gemma-3-27b-it" : "gemma4");
+// Hosted models tried in order if the primary returns an error. Kept as
+// Gemma 4 so the app stays Gemma-powered; append "gemini-2.5-flash" via env
+// for extra insurance during a rare double-Gemma outage.
+const FALLBACK_MODELS = (process.env.GEMMA_FALLBACK_MODELS || "gemma-4-31b-it")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 const REQUEST_TIMEOUT_MS = 55_000; // just under the route maxDuration (60s)
 
 interface ChatTurn {
@@ -104,8 +104,25 @@ async function openAiChat(messages: ChatTurn[]): Promise<string | null> {
     console.error("[gemma] AI_API_KEY is not set for the hosted provider.");
     return null;
   }
+  // Free-tier Gemma models have INDEPENDENT transient 5xx bursts (26b can be
+  // down while 31b is up), so if the primary fails we fall through to the next
+  // model. Each gets ~20s, keeping total within the 60s route budget.
+  const models = [GEMMA_MODEL, ...FALLBACK_MODELS].filter(
+    (m, i, arr) => arr.indexOf(m) === i,
+  );
+  for (const model of models) {
+    const reply = await callHostedModel(model, messages);
+    if (reply !== null) return reply;
+  }
+  return null;
+}
+
+async function callHostedModel(
+  model: string,
+  messages: ChatTurn[],
+): Promise<string | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), 20_000);
   try {
     const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
       method: "POST",
@@ -114,18 +131,16 @@ async function openAiChat(messages: ChatTurn[]): Promise<string | null> {
         Authorization: `Bearer ${AI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: GEMMA_MODEL,
+        model,
         messages,
         temperature: 0.7,
-        // Gemma 4 "thinks" before answering. Cap generation so a reply returns
-        // within the serverless window: too high and it's slow enough to time
-        // out (→ fallback), too low and the reply itself gets truncated.
+        // Cap generation so a reply returns within the serverless window.
         max_tokens: 1024,
       }),
       signal: controller.signal,
     });
     if (!res.ok) {
-      console.error(`[gemma] hosted API responded ${res.status}`);
+      console.error(`[gemma] ${model} responded ${res.status}`);
       return null;
     }
     // Google's OpenAI-compat endpoint can wrap the payload in an array.
@@ -135,7 +150,7 @@ async function openAiChat(messages: ChatTurn[]): Promise<string | null> {
     };
     return cleanReply(data?.choices?.[0]?.message?.content);
   } catch (err) {
-    console.error("[gemma] hosted API unreachable:", (err as Error).message);
+    console.error(`[gemma] ${model} error:`, (err as Error).message);
     return null;
   } finally {
     clearTimeout(timer);

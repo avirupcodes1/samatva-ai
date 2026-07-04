@@ -103,9 +103,18 @@ export default function CheckInPage() {
             inputMode="decimal"
             className="input"
             value={sleepHours}
-            onChange={(e) => setSleepHours(e.target.value)}
+            onChange={(e) => {
+              // Hard-cap as the user types: 24 is the most that's valid.
+              const v = e.target.value;
+              if (v === "") return setSleepHours("");
+              const n = Number(v);
+              if (Number.isNaN(n)) return; // ignore junk keystrokes
+              if (n > 24) return setSleepHours("24");
+              if (n < 0) return setSleepHours("0");
+              setSleepHours(v); // keep raw so "6." / "6.5" typing still works
+            }}
             onBlur={(e) => {
-              // max/min only constrain the spinner — clamp typed values to 0–24.
+              // Normalise on exit (e.g. trailing dot) and re-assert the 0–24 range.
               const v = e.target.value.trim();
               if (v === "") return setSleepHours("");
               const n = Number(v);

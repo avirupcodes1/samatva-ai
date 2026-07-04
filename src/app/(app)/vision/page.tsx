@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImageUp, Sparkles, Loader2, ShieldCheck, X } from "lucide-react";
+import { ImageUp, Sprout, Loader2, ShieldCheck, X } from "lucide-react";
 import { cn, relativeTime } from "@/lib/utils";
 import { VISION_KINDS, type VisionEntry, type VisionKind } from "@/lib/types";
 
@@ -148,7 +148,7 @@ export default function VisionPage() {
         )}
 
         <button className="btn btn-primary mt-4 w-full" onClick={analyze} disabled={busy || !image}>
-          {busy ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+          {busy ? <Loader2 size={18} className="animate-spin" /> : <Sprout size={18} />}
           {busy ? "Looking…" : `Reflect on my ${activeKind.label.toLowerCase()}`}
         </button>
 
@@ -175,7 +175,7 @@ export default function VisionPage() {
                   <span className="text-xs text-ink-faint">{relativeTime(e.createdAt)}</span>
                 </div>
                 <div className="flex gap-2 rounded-[var(--radius-sm)] bg-primary-soft/40 p-3">
-                  <Sparkles size={16} className="mt-0.5 shrink-0 text-primary-strong" />
+                  <Sprout size={16} className="mt-0.5 shrink-0 text-primary-strong" />
                   <p className="text-sm text-ink">{e.reflection}</p>
                 </div>
               </div>

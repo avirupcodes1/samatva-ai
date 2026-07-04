@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { NotebookPen, Loader2, Sparkles } from "lucide-react";
+import { NotebookPen, Loader2, Sprout } from "lucide-react";
 import { CrisisAlert } from "@/components/Helplines";
 import { relativeTime } from "@/lib/utils";
 import type { JournalEntry } from "@/lib/types";
@@ -70,7 +70,7 @@ export default function JournalPage() {
       {/* Composer */}
       <div className="card p-6">
         <div className="mb-3 flex items-center gap-2 text-sm text-primary-strong">
-          <Sparkles size={15} />
+          <Sprout size={15} />
           <span>{prompt}</span>
         </div>
         <textarea
@@ -109,7 +109,7 @@ export default function JournalPage() {
                   e.crisis ? "bg-danger-soft" : "bg-primary-soft/40"
                 }`}
               >
-                <Sparkles
+                <Sprout
                   size={16}
                   className={`mt-0.5 shrink-0 ${e.crisis ? "text-danger-strong" : "text-primary-strong"}`}
                 />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sprout, Loader2 } from "lucide-react";
 
 export function WeeklySummary() {
   const [summary, setSummary] = useState<string | null>(null);
@@ -24,11 +24,11 @@ export function WeeklySummary() {
     <div className="card p-6">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold text-ink">
-          <Sparkles size={18} className="text-accent" /> Your weekly reflection
+          <Sprout size={18} className="text-accent" /> Your weekly reflection
         </h2>
         {!summary && (
           <button className="btn btn-soft text-sm" onClick={generate} disabled={loading}>
-            {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            {loading ? <Loader2 size={16} className="animate-spin" /> : <Sprout size={16} />}
             {loading ? "Writing…" : "Generate"}
           </button>
         )}

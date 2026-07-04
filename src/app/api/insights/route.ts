@@ -4,6 +4,9 @@ import { db } from "@/lib/storage";
 import { weeklySummary } from "@/lib/gemma";
 import { daysUntil } from "@/lib/utils";
 
+// Gemma 4's thinking can take a while; allow the function room to finish.
+export const maxDuration = 60;
+
 export async function GET() {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

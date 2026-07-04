@@ -30,7 +30,7 @@ const AI_BASE_URL = (
 ).replace(/\/$/, "");
 const GEMMA_MODEL =
   process.env.GEMMA_MODEL || (isHosted ? "gemma-3-27b-it" : "gemma4");
-const REQUEST_TIMEOUT_MS = 45_000;
+const REQUEST_TIMEOUT_MS = 55_000; // just under the route maxDuration (60s)
 
 interface ChatTurn {
   role: "system" | "user" | "assistant";
@@ -117,7 +117,10 @@ async function openAiChat(messages: ChatTurn[]): Promise<string | null> {
         model: GEMMA_MODEL,
         messages,
         temperature: 0.7,
-        max_tokens: 800,
+        // Gemma 4 "thinks" before answering. Cap generation so a reply returns
+        // within the serverless window: too high and it's slow enough to time
+        // out (→ fallback), too low and the reply itself gets truncated.
+        max_tokens: 1024,
       }),
       signal: controller.signal,
     });
@@ -125,7 +128,9 @@ async function openAiChat(messages: ChatTurn[]): Promise<string | null> {
       console.error(`[gemma] hosted API responded ${res.status}`);
       return null;
     }
-    const data = (await res.json()) as {
+    // Google's OpenAI-compat endpoint can wrap the payload in an array.
+    const raw = (await res.json()) as unknown;
+    const data = (Array.isArray(raw) ? raw[0] : raw) as {
       choices?: { message?: { content?: string } }[];
     };
     return cleanReply(data?.choices?.[0]?.message?.content);

@@ -6,6 +6,9 @@ import { screenForCrisis, crisisResponseMessage } from "@/lib/safety";
 import { uid, daysUntil } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/types";
 
+// Gemma 4's thinking can take a while; allow the function room to finish.
+export const maxDuration = 60;
+
 export async function GET() {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

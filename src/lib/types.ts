@@ -56,14 +56,26 @@ export interface JournalEntry {
 
 export type ChatRole = "user" | "assistant";
 
+/** A companion conversation. Messages reference it by id. */
+export interface ChatSession {
+  id: string;
+  userId: string;
+  title: string; // derived from the first user message, or "New conversation"
+  createdAt: string;
+  updatedAt: string; // last activity — used to sort the conversation list
+}
+
 export interface ChatMessage {
   id: string;
   userId: string;
+  sessionId: string; // which conversation this message belongs to
   role: ChatRole;
   content: string;
   crisis: boolean; // true when the safety layer flagged the user message
   createdAt: string;
 }
+
+export const DEFAULT_SESSION_TITLE = "New conversation";
 
 /* ---- Vision (multimodal) --------------------------------------------- */
 

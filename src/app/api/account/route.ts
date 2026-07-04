@@ -7,13 +7,15 @@ export async function GET() {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [moods, journals, chats] = await Promise.all([
+  const [moods, journals, sessions, chats, visions] = await Promise.all([
     db.getMoods(user.id),
     db.getJournal(user.id),
-    db.getChat(user.id),
+    db.getSessions(user.id),
+    db.getAllChats(user.id),
+    db.getVisions(user.id),
   ]);
 
-  const payload = { user, moods, journals, chats, exportedAt: new Date().toISOString() };
+  const payload = { user, moods, journals, sessions, chats, visions, exportedAt: new Date().toISOString() };
   return new NextResponse(JSON.stringify(payload, null, 2), {
     headers: {
       "Content-Type": "application/json",

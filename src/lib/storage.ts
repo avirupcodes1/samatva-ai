@@ -12,7 +12,14 @@ import { promises as fs } from "fs";
 import path from "path";
 import { Redis } from "@upstash/redis";
 import { uid } from "./utils";
-import type { User, MoodEntry, JournalEntry, ChatMessage, VisionEntry } from "./types";
+import type {
+  User,
+  MoodEntry,
+  JournalEntry,
+  ChatMessage,
+  ChatSession,
+  VisionEntry,
+} from "./types";
 
 /*
  * Backend selection:
@@ -178,11 +185,44 @@ export const db = {
     }));
   },
 
-  // Chat
-  async getChat(userId: string): Promise<ChatMessage[]> {
+  // Chat sessions (conversations)
+  async getSessions(userId: string): Promise<ChatSession[]> {
+    const all = await readCollection<ChatSession>("chatSessions");
+    return all
+      .filter((s) => s.userId === userId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  },
+  async getSession(userId: string, sessionId: string): Promise<ChatSession | null> {
+    const all = await readCollection<ChatSession>("chatSessions");
+    return all.find((s) => s.id === sessionId && s.userId === userId) ?? null;
+  },
+  async createSession(userId: string, title: string): Promise<ChatSession> {
+    const now = new Date().toISOString();
+    const session: ChatSession = { id: uid("s_"), userId, title, createdAt: now, updatedAt: now };
+    await mutate<ChatSession, void>("chatSessions", (all) => ({
+      items: [...all, session],
+      result: undefined,
+    }));
+    return session;
+  },
+  async touchSession(
+    sessionId: string,
+    patch: Partial<Pick<ChatSession, "title" | "updatedAt">>,
+  ): Promise<void> {
+    await mutate<ChatSession, void>("chatSessions", (all) => {
+      const idx = all.findIndex((s) => s.id === sessionId);
+      if (idx === -1) return { items: all, result: undefined };
+      const items = [...all];
+      items[idx] = { ...items[idx], ...patch };
+      return { items, result: undefined };
+    });
+  },
+
+  // Chat messages (scoped to a session)
+  async getSessionMessages(userId: string, sessionId: string): Promise<ChatMessage[]> {
     const all = await readCollection<ChatMessage>("chats");
     return all
-      .filter((c) => c.userId === userId)
+      .filter((c) => c.userId === userId && c.sessionId === sessionId)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   },
   async addChat(message: ChatMessage): Promise<void> {
@@ -190,6 +230,13 @@ export const db = {
       items: [...all, message],
       result: undefined,
     }));
+  },
+  /** All of a user's chat messages across every session (for data export). */
+  async getAllChats(userId: string): Promise<ChatMessage[]> {
+    const all = await readCollection<ChatMessage>("chats");
+    return all
+      .filter((c) => c.userId === userId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   },
 
   // Vision (only the text reflection is stored — never the image)
@@ -213,6 +260,7 @@ export const db = {
       mutate<MoodEntry, void>("moods", (m) => ({ items: m.filter((x) => x.userId !== userId), result: undefined })),
       mutate<JournalEntry, void>("journals", (j) => ({ items: j.filter((x) => x.userId !== userId), result: undefined })),
       mutate<ChatMessage, void>("chats", (c) => ({ items: c.filter((x) => x.userId !== userId), result: undefined })),
+      mutate<ChatSession, void>("chatSessions", (s) => ({ items: s.filter((x) => x.userId !== userId), result: undefined })),
       mutate<VisionEntry, void>("visions", (v) => ({ items: v.filter((x) => x.userId !== userId), result: undefined })),
     ]);
   },

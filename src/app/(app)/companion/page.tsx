@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Send, MessageCircleHeart, LifeBuoy } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Send, MessageCircleHeart, LifeBuoy, Plus } from "lucide-react";
 import { CompactHelplines } from "@/components/Helplines";
 import { screenForCrisis } from "@/lib/safety";
 import { cn } from "@/lib/utils";
-import type { ChatMessage } from "@/lib/types";
+import type { ChatMessage, ChatSession } from "@/lib/types";
 
 const STARTERS = [
   "I'm feeling really anxious about my exam.",
@@ -15,6 +15,8 @@ const STARTERS = [
 ];
 
 export default function CompanionPage() {
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -23,30 +25,61 @@ export default function CompanionPage() {
   const [crisisOpen, setCrisisOpen] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    fetch("/api/companion")
-      .then((r) => r.json())
-      .then((d) => {
-        setMessages(d.messages ?? []);
-        if ((d.messages ?? []).some((m: ChatMessage) => m.crisis)) setShowCrisis(true);
-      })
-      .catch(() => {})
-      .finally(() => setLoaded(true));
+  const refreshSessions = useCallback(async () => {
+    const d = await fetch("/api/companion/sessions").then((r) => r.json()).catch(() => ({}));
+    const list: ChatSession[] = d.sessions ?? [];
+    setSessions(list);
+    return list;
   }, []);
+
+  const loadMessages = useCallback(async (sessionId: string) => {
+    const d = await fetch(`/api/companion?sessionId=${sessionId}`).then((r) => r.json()).catch(() => ({}));
+    const msgs: ChatMessage[] = d.messages ?? [];
+    setMessages(msgs);
+    setShowCrisis(msgs.some((m) => m.crisis));
+    setCrisisOpen(true);
+  }, []);
+
+  // On mount: load conversations, open the most recent (or a fresh one).
+  useEffect(() => {
+    (async () => {
+      const list = await refreshSessions();
+      if (list.length > 0) {
+        setActiveId(list[0].id);
+        await loadMessages(list[0].id);
+      }
+      setLoaded(true);
+    })();
+  }, [refreshSessions, loadMessages]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, sending]);
 
+  function newChat() {
+    // Fresh, unsent conversation — the server creates it on the first message.
+    setActiveId(null);
+    setMessages([]);
+    setShowCrisis(false);
+    setInput("");
+  }
+
+  async function selectSession(id: string) {
+    if (id === activeId) return;
+    setActiveId(id);
+    setMessages([]);
+    await loadMessages(id);
+  }
+
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
-    // Defense-in-depth: surface helplines instantly, before the server replies.
     if (screenForCrisis(trimmed).isCrisis) setShowCrisis(true);
     setInput("");
     const optimistic: ChatMessage = {
       id: `tmp_${Date.now()}`,
       userId: "me",
+      sessionId: activeId ?? "",
       role: "user",
       content: trimmed,
       crisis: false,
@@ -58,15 +91,17 @@ export default function CompanionPage() {
       const res = await fetch("/api/companion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
+        body: JSON.stringify({ sessionId: activeId ?? undefined, message: trimmed }),
       });
       const data = await res.json();
       if (res.ok) {
         setMessages((m) => [...m, data.reply]);
         if (data.crisis) setShowCrisis(true);
+        if (data.sessionId && data.sessionId !== activeId) setActiveId(data.sessionId);
+        refreshSessions(); // pick up the new/updated title + ordering
       }
     } catch {
-      /* ignore for prototype */
+      /* keep the optimistic message so text isn't lost */
     } finally {
       setSending(false);
     }
@@ -74,15 +109,41 @@ export default function CompanionPage() {
 
   return (
     <div className="mx-auto flex h-[calc(100vh-8rem)] max-w-2xl flex-col">
-      <div className="mb-4">
+      <div className="mb-3">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-ink">
           <MessageCircleHeart className="text-accent" /> Companion
         </h1>
         <p className="text-ink-soft">A calm, private space to talk. Not a therapist — but always here.</p>
       </div>
 
+      {/* Conversations */}
+      <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1">
+        <button
+          onClick={newChat}
+          className={cn(
+            "chip shrink-0 gap-1",
+            activeId === null ? "bg-primary text-on-primary" : "hover:bg-primary-soft hover:text-primary-strong",
+          )}
+        >
+          <Plus size={14} /> New chat
+        </button>
+        {sessions.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => selectSession(s.id)}
+            title={s.title}
+            className={cn(
+              "chip max-w-[170px] shrink-0 truncate",
+              s.id === activeId ? "bg-primary-soft text-primary-strong" : "hover:text-ink",
+            )}
+          >
+            {s.title}
+          </button>
+        ))}
+      </div>
+
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto rounded-[var(--radius-md)] bg-surface p-4 border border-border">
+      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto rounded-[var(--radius-md)] border border-border bg-surface p-4">
         {loaded && messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
             <span className="text-4xl">🌱</span>

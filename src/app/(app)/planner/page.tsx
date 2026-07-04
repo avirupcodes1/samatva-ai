@@ -10,6 +10,7 @@ import {
   Loader2,
   Sprout,
   Clock,
+  Download,
 } from "lucide-react";
 import { cn, dateKey } from "@/lib/utils";
 import { TASK_PRIORITIES, type Task, type TaskPriority } from "@/lib/types";
@@ -45,6 +46,7 @@ export default function PlannerPage() {
 
   const [opinion, setOpinion] = useState<string | null>(null);
   const [opining, setOpining] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const range = useMemo(() => {
     const y = viewMonth.getFullYear();
@@ -157,6 +159,43 @@ export default function PlannerPage() {
     }
   }
 
+  // Export ALL of the user's tasks to a real .xlsx. The library is loaded
+  // on demand so it never bloats the initial page bundle.
+  async function exportXlsx() {
+    setExporting(true);
+    try {
+      const d = await fetch("/api/tasks").then((r) => r.json());
+      const all: Task[] = d.tasks ?? [];
+      const rows = [...all]
+        .sort(
+          (a, b) =>
+            a.date.localeCompare(b.date) ||
+            (a.startTime ?? "99:99").localeCompare(b.startTime ?? "99:99"),
+        )
+        .map((t) => ({
+          Date: t.date,
+          Task: t.title,
+          Start: t.startTime ?? "",
+          End: t.endTime ?? "",
+          Priority: t.priority,
+          Done: t.done ? "Yes" : "No",
+        }));
+
+      const XLSX = await import("xlsx");
+      const ws = XLSX.utils.json_to_sheet(
+        rows.length ? rows : [{ Date: "", Task: "No tasks yet", Start: "", End: "", Priority: "", Done: "" }],
+      );
+      ws["!cols"] = [{ wch: 12 }, { wch: 42 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 6 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Study plan");
+      XLSX.writeFile(wb, `samatva-planner-${dateKey(new Date())}.xlsx`);
+    } catch {
+      /* ignore — nothing downloaded */
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const selectedLabel = new Date(selected + "T00:00:00").toLocaleDateString(undefined, {
     weekday: "long",
     day: "numeric",
@@ -165,11 +204,17 @@ export default function PlannerPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-ink">
-          <CalendarDays className="text-accent" /> Planner
-        </h1>
-        <p className="text-ink-soft">Plan your study days, build a timetable, and ask Samatva if it&apos;s balanced.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-ink">
+            <CalendarDays className="text-accent" /> Planner
+          </h1>
+          <p className="text-ink-soft">Plan your study days, build a timetable, and ask Samatva if it&apos;s balanced.</p>
+        </div>
+        <button onClick={exportXlsx} disabled={exporting} className="btn btn-ghost shrink-0 text-sm" title="Download your tasks as an Excel sheet">
+          {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+          Export
+        </button>
       </div>
 
       {/* Calendar */}

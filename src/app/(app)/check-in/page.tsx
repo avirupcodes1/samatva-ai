@@ -100,9 +100,18 @@ export default function CheckInPage() {
             min={0}
             max={24}
             step={0.5}
+            inputMode="decimal"
             className="input"
             value={sleepHours}
             onChange={(e) => setSleepHours(e.target.value)}
+            onBlur={(e) => {
+              // max/min only constrain the spinner — clamp typed values to 0–24.
+              const v = e.target.value.trim();
+              if (v === "") return setSleepHours("");
+              const n = Number(v);
+              if (Number.isNaN(n)) return setSleepHours("");
+              setSleepHours(String(Math.min(24, Math.max(0, n))));
+            }}
             placeholder="e.g. 6.5"
           />
         </div>

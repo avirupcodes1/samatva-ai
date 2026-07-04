@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, Pencil } from "lucide-react";
 import { cn, MOOD_EMOJI, MOOD_LABELS } from "@/lib/utils";
 import type { MoodEntry } from "@/lib/types";
 
@@ -21,6 +22,8 @@ export default function CheckInPage() {
   const [error, setError] = useState<string | null>(null);
   const [isUpdate, setIsUpdate] = useState(false);
   const [wasUpdate, setWasUpdate] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // If they already checked in today, prefill so this becomes an update.
   useEffect(() => {
@@ -40,7 +43,8 @@ export default function CheckInPage() {
           setIsUpdate(true);
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   async function submit() {
@@ -78,6 +82,44 @@ export default function CheckInPage() {
         </span>
         <h1 className="mt-4 text-xl font-bold text-ink">{wasUpdate ? "Updated 💚" : "Checked in 💚"}</h1>
         <p className="mt-1 text-ink-soft">Thank you for taking a moment for yourself.</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-xl space-y-4">
+        <div className="skeleton h-8 w-56 rounded-[var(--radius-sm)]" />
+        <div className="card skeleton h-40" />
+      </div>
+    );
+  }
+
+  // Already checked in today — show a notice with an explicit "update" action.
+  if (isUpdate && !editing) {
+    return (
+      <div className="mx-auto max-w-md">
+        <div className="card p-8 text-center">
+          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft text-primary-strong">
+            <Check size={30} />
+          </span>
+          <h1 className="mt-4 text-xl font-bold text-ink">You&apos;ve already checked in today 💚</h1>
+          <p className="mt-2 text-ink-soft">
+            Today you noted feeling{" "}
+            <span className="font-semibold text-ink">
+              {MOOD_EMOJI[mood]} {MOOD_LABELS[mood]}
+            </span>
+            . Come back tomorrow for your next check-in.
+          </p>
+          <button onClick={() => setEditing(true)} className="btn btn-primary mt-6">
+            <Pencil size={16} /> Update today&apos;s check-in
+          </button>
+          <div className="mt-3">
+            <Link href="/dashboard" className="text-sm text-ink-soft hover:text-ink">
+              Back to dashboard
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }

@@ -11,6 +11,7 @@
  *   GEMMA_MODEL   default gemma4
  */
 import { HELPLINES } from "./safety";
+import { retrieve, groundingBlock } from "./knowledge";
 import type { VisionKind } from "./types";
 
 
@@ -224,8 +225,10 @@ export async function companionReply(
   userMessage: string,
   ctx?: UserContext,
 ): Promise<string> {
+  // RAG: retrieve vetted techniques relevant to what the student said.
+  const grounding = groundingBlock(retrieve(userMessage));
   const messages: ChatTurn[] = [
-    { role: "system", content: PERSONA + contextLine(ctx) },
+    { role: "system", content: PERSONA + contextLine(ctx) + grounding },
     ...history.slice(-10),
     { role: "user", content: userMessage },
   ];
@@ -235,8 +238,9 @@ export async function companionReply(
 
 /** Short, kind reflection on a journal entry. */
 export async function journalReflection(entry: string, ctx?: UserContext): Promise<string> {
+  const grounding = groundingBlock(retrieve(entry));
   const messages: ChatTurn[] = [
-    { role: "system", content: PERSONA + contextLine(ctx) },
+    { role: "system", content: PERSONA + contextLine(ctx) + grounding },
     {
       role: "user",
       content:

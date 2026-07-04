@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Send, MessageCircleHeart, LifeBuoy, Plus, History } from "lucide-react";
 import { CompactHelplines } from "@/components/Helplines";
 import { screenForCrisis } from "@/lib/safety";
-import { cn, relativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { ChatMessage, ChatSession } from "@/lib/types";
 
 const STARTERS = [
@@ -23,7 +24,6 @@ export default function CompanionPage() {
   const [loaded, setLoaded] = useState(false);
   const [showCrisis, setShowCrisis] = useState(false);
   const [crisisOpen, setCrisisOpen] = useState(true);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const refreshSessions = useCallback(async () => {
@@ -41,13 +41,17 @@ export default function CompanionPage() {
     setCrisisOpen(true);
   }, []);
 
-  // On mount: load conversations, open the most recent (or a fresh one).
+  // On mount: load conversations and open the one from ?s= (chosen on the
+  // history screen) if present, otherwise the most recent.
   useEffect(() => {
     (async () => {
       const list = await refreshSessions();
-      if (list.length > 0) {
-        setActiveId(list[0].id);
-        await loadMessages(list[0].id);
+      const wanted =
+        typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("s") : null;
+      const target = (wanted && list.some((s) => s.id === wanted) && wanted) || list[0]?.id || null;
+      if (target) {
+        setActiveId(target);
+        await loadMessages(target);
       }
       setLoaded(true);
     })();
@@ -79,13 +83,6 @@ export default function CompanionPage() {
     setMessages([]);
     setShowCrisis(false);
     setInput("");
-  }
-
-  async function selectSession(id: string) {
-    if (id === activeId) return;
-    setActiveId(id);
-    setMessages([]);
-    await loadMessages(id);
   }
 
   async function send(text: string) {
@@ -136,53 +133,13 @@ export default function CompanionPage() {
 
       {/* Conversation controls */}
       <div className="mb-3 flex items-center gap-2">
-        <button
-          onClick={() => {
-            newChat();
-            setHistoryOpen(false);
-          }}
-          className="chip gap-1 bg-primary text-on-primary hover:opacity-90"
-        >
+        <button onClick={newChat} className="chip gap-1 bg-primary text-on-primary hover:opacity-90">
           <Plus size={14} /> New chat
         </button>
-
-        {/* Past history — floats as a dropdown so it never pushes the chat */}
-        <div className="relative">
-          <button
-            onClick={() => setHistoryOpen((o) => !o)}
-            className={cn("chip gap-1", historyOpen ? "bg-accent-soft text-accent" : "hover:text-ink")}
-          >
-            <History size={14} /> Past history
-            {sessions.length > 0 && <span className="text-ink-faint">({sessions.length})</span>}
-          </button>
-          {historyOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setHistoryOpen(false)} />
-              <div className="card absolute left-0 top-full z-20 mt-2 max-h-72 w-72 max-w-[80vw] overflow-y-auto p-2 shadow-[var(--shadow-lift)]">
-                {sessions.length === 0 ? (
-                  <p className="px-2 py-3 text-center text-sm text-ink-faint">No past conversations yet.</p>
-                ) : (
-                  sessions.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => {
-                        selectSession(s.id);
-                        setHistoryOpen(false);
-                      }}
-                      className={cn(
-                        "flex w-full items-center justify-between gap-3 rounded-[var(--radius-sm)] px-3 py-2 text-left transition",
-                        s.id === activeId ? "bg-primary-soft" : "hover:bg-surface-soft",
-                      )}
-                    >
-                      <span className="truncate text-sm text-ink">{s.title}</span>
-                      <span className="shrink-0 text-xs text-ink-faint">{relativeTime(s.updatedAt)}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-        </div>
+        <Link href="/companion/history" className="chip gap-1 hover:text-ink">
+          <History size={14} /> Past history
+          {sessions.length > 0 && <span className="text-ink-faint">({sessions.length})</span>}
+        </Link>
       </div>
 
       {/* Messages */}

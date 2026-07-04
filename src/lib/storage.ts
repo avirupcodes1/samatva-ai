@@ -19,6 +19,7 @@ import type {
   ChatMessage,
   ChatSession,
   VisionEntry,
+  Task,
 } from "./types";
 
 /*
@@ -34,7 +35,8 @@ const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_
 const redis =
   REDIS_URL && REDIS_TOKEN ? new Redis({ url: REDIS_URL, token: REDIS_TOKEN }) : null;
 
-const DATA_DIR = path.join(process.cwd(), "data");
+// SAMATVA_DATA_DIR lets tests point the fs backend at a temp directory.
+const DATA_DIR = process.env.SAMATVA_DATA_DIR || path.join(process.cwd(), "data");
 const keyFor = (collection: string) => `samatva:${collection}`;
 
 async function ensureDir(): Promise<void> {
@@ -253,6 +255,48 @@ export const db = {
     }));
   },
 
+  // Planner tasks (untimed = to-do, timed = timetable block)
+  async getTasks(userId: string, date?: string): Promise<Task[]> {
+    const all = await readCollection<Task>("tasks");
+    return all
+      .filter((t) => t.userId === userId && (!date || t.date === date))
+      .sort(
+        (a, b) =>
+          (a.startTime ?? "99:99").localeCompare(b.startTime ?? "99:99") ||
+          a.createdAt.localeCompare(b.createdAt),
+      );
+  },
+  async getTasksInRange(userId: string, from: string, to: string): Promise<Task[]> {
+    const all = await readCollection<Task>("tasks");
+    return all.filter((t) => t.userId === userId && t.date >= from && t.date <= to);
+  },
+  async getTask(userId: string, id: string): Promise<Task | null> {
+    const all = await readCollection<Task>("tasks");
+    return all.find((t) => t.id === id && t.userId === userId) ?? null;
+  },
+  async addTask(task: Task): Promise<void> {
+    await mutate<Task, void>("tasks", (all) => ({ items: [...all, task], result: undefined }));
+  },
+  async updateTask(userId: string, id: string, patch: Partial<Task>): Promise<Task | null> {
+    return mutate<Task, Task | null>("tasks", (all) => {
+      const idx = all.findIndex((t) => t.id === id && t.userId === userId);
+      if (idx === -1) return { items: all, result: null };
+      const updated: Task = { ...all[idx], ...patch, id: all[idx].id, userId: all[idx].userId };
+      const items = [...all];
+      items[idx] = updated;
+      return { items, result: updated };
+    });
+  },
+  async deleteTask(userId: string, id: string): Promise<boolean> {
+    return mutate<Task, boolean>("tasks", (all) => {
+      const exists = all.some((t) => t.id === id && t.userId === userId);
+      return {
+        items: all.filter((t) => !(t.id === id && t.userId === userId)),
+        result: exists,
+      };
+    });
+  },
+
   // Account deletion (data export/erase) — serialized per collection.
   async deleteUserData(userId: string): Promise<void> {
     await Promise.all([
@@ -262,6 +306,7 @@ export const db = {
       mutate<ChatMessage, void>("chats", (c) => ({ items: c.filter((x) => x.userId !== userId), result: undefined })),
       mutate<ChatSession, void>("chatSessions", (s) => ({ items: s.filter((x) => x.userId !== userId), result: undefined })),
       mutate<VisionEntry, void>("visions", (v) => ({ items: v.filter((x) => x.userId !== userId), result: undefined })),
+      mutate<Task, void>("tasks", (t) => ({ items: t.filter((x) => x.userId !== userId), result: undefined })),
     ]);
   },
 };

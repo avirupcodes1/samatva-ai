@@ -96,6 +96,27 @@ export interface VisionEntry {
   createdAt: string;
 }
 
+/* ---- Planner (tasks + timetable) ------------------------------------- */
+
+export type TaskPriority = "low" | "normal" | "high";
+export const TASK_PRIORITIES: TaskPriority[] = ["low", "normal", "high"];
+
+/**
+ * A planned item for a given day. With start/end times it's a timetable
+ * block; without them it's a simple to-do.
+ */
+export interface Task {
+  id: string;
+  userId: string;
+  date: string; // yyyy-mm-dd — the day it's planned for
+  title: string;
+  startTime: string | null; // "HH:MM" (24h) or null for an untimed to-do
+  endTime: string | null; // "HH:MM" or null
+  priority: TaskPriority;
+  done: boolean;
+  createdAt: string;
+}
+
 export function toPublicUser(user: User): PublicUser {
   const { passwordHash: _passwordHash, ...pub } = user;
   return pub;

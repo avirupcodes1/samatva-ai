@@ -305,6 +305,31 @@ export async function visionReflect(
   return reply ?? fallbackVisionReflection();
 }
 
+/** Warm, well-being-focused opinion on a day's study plan. */
+export async function planOpinion(
+  date: string,
+  tasks: { title: string; startTime: string | null; endTime: string | null; done: boolean }[],
+  ctx?: UserContext,
+): Promise<string> {
+  const list = tasks
+    .map((t) => {
+      const time = t.startTime ? `[${t.startTime}${t.endTime ? `-${t.endTime}` : ""}] ` : "";
+      return `- ${time}${t.title}${t.done ? " (done)" : ""}`;
+    })
+    .join("\n");
+  const messages: ChatTurn[] = [
+    { role: "system", content: PERSONA + contextLine(ctx) },
+    {
+      role: "user",
+      content:
+        `Here is my study plan for ${date}. As my warm well-being companion (not a strict taskmaster), give a short, honest opinion in 3-5 sentences: is it balanced and realistic, is there room for breaks, meals and sleep, and am I overloading? Offer one or two gentle, practical suggestions.\n\n` +
+        (list || "(no tasks planned yet)"),
+    },
+  ];
+  const reply = await chat(messages);
+  return reply ?? fallbackPlanOpinion();
+}
+
 /* ------------------------------------------------------------------ */
 /*  Graceful fallbacks (used when Ollama is offline)                   */
 /* ------------------------------------------------------------------ */
@@ -334,6 +359,13 @@ function fallbackWeeklySummary(stats: { checkIns: number; trend: string }): stri
     FALLBACK_MARK +
     `You checked in ${stats.checkIns} time(s) this week — that steady self-awareness is genuinely worth celebrating. ` +
     `Your mood trend looks ${stats.trend}. For next week, try one small anchor: a fixed wind-down time before sleep.`
+  );
+}
+
+function fallbackPlanOpinion(): string {
+  return (
+    FALLBACK_MARK +
+    "Planning your day at all is already a caring, proactive step — well done. I couldn't reach my thinking engine to look closely just now, but do make sure there's room for short breaks, meals and a full night's sleep. A steady, kind pace beats an overloaded one."
   );
 }
 

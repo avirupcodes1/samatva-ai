@@ -114,11 +114,3 @@ Samatva has **no training or fine-tuning** — the intelligence is entirely **pr
 
 ---
 
-## 🚀 Getting started
-
-### Prerequisites
-- **Node.js 20+**
-- (Optional) **Ollama** for fully-local Gemma, or a free **Google AI Studio** key for hosted Gemma.
-
-### 1. Install
-```bash
